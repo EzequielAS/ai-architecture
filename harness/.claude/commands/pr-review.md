@@ -1,75 +1,75 @@
 ---
-description: Revisa um PR contra spec, doc de arquitetura e gates do projeto, e posta os findings como comentários inline e resumo no repositório remoto
+description: Reviews a PR against spec, architecture doc, and project gates, and posts the findings as inline comments and a summary on the remote repository
 argument-hint: <PR_NUMBER>
 allowed-tools: Read, Glob, Grep, Bash(.claude/bin/pr-review/*), Bash(mkdir:*), Bash(printf:*), Bash(cat:*), Bash(tee:*), Bash(node:*), Bash(npm run:*), Bash(pnpm:*), Bash(yarn:*), Bash(git remote:*), Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git rev-parse:*), Bash(git fetch:*), Bash(gh:*), Bash(glab:*), Bash(az:*)
 ---
 
 # PR Review
 
-Revisa o PR `$1` juntando três fontes de sinal — a **análise estática do binário**, a
-**spec relacionada** e o **documento de arquitetura** — e posta o resultado no
-repositório remoto.
+Reviews PR `$1` by combining three signal sources — the **binary's static analysis**, the
+**related spec**, and the **architecture document** — and posts the result to the
+remote repository.
 
-**Invocação:** `/pr-review <PR_NUMBER>`
+**Invocation:** `/pr-review <PR_NUMBER>`
 
 ---
 
-## Convenções
+## Conventions
 
-| Placeholder | Valor |
+| Placeholder | Value |
 |---|---|
-| `$GATE` | `.claude/bin/pr-review/quality-gate-linux` no Linux, `.claude/bin/pr-review/quality-gate-darwin` no macOS (resolva pelo SO informado no ambiente) |
-| `$WORK` | um diretório temporário desta execução, ex.: `<scratchpad>/pr-review-<PR_NUMBER>` |
-| `$PR` | o número do PR passado como argumento |
+| `$GATE` | `.claude/bin/pr-review/quality-gate-linux` on Linux, `.claude/bin/pr-review/quality-gate-darwin` on macOS (resolve using the OS reported by the environment) |
+| `$WORK` | a temporary directory for this run, e.g. `<scratchpad>/pr-review-<PR_NUMBER>` |
+| `$PR` | the PR number passed as argument |
 
-Se `$GATE` vier sem bit de execução após um clone: `chmod +x .claude/bin/pr-review/*`.
+If `$GATE` comes without the execute bit after a clone: `chmod +x .claude/bin/pr-review/*`.
 
-Tudo é acumulado em `$WORK/review.md`. A interpretação acontece **uma vez**, no momento
-em que cada saída é produzida — o Passo 7 só monta o JSON, nunca reanalisa. O arquivo
-tem dois tipos de bloco:
+Everything accumulates in `$WORK/review.md`. Interpretation happens **once**, at the
+moment each output is produced — Step 7 only assembles the JSON, it never re-analyzes. The
+file has two kinds of block:
 
-- **`## Status:`** — resultado dos gates do projeto, ex.:
+- **`## Status:`** — result of the project's gates, e.g.:
   `## Status: lint PASS · build PASS · test FAIL`.
-- **`## Finding:`** — o ledger interpretado. Anexe cada finding no momento em que
-  confirmá-lo, para nada se perder por limite de contexto. Formato:
+- **`## Finding:`** — the interpreted ledger. Append each finding the moment you
+  confirm it, so nothing is lost to a context limit. Format:
 
   ```markdown
   ## Finding: <path>:<line> — <emoji> **<label>**
-  - type: critico | alerta | oportunidade
+  - type: critical | warning | opportunity
   - source: lint | build | test | file-size | duplication | effects | lens:<a|b|c>
 
-  <corpo — o texto final do comentário inline; cole aqui a saída de erro relevante>
+  <body — the final text of the inline comment; paste the relevant error output here>
   ```
 
-  Finding sem linha concreta (falha de build/test) usa `line: —` e vai para o resumo,
-  não para um comentário inline.
+  A finding with no concrete line (build/test failure) uses `line: —` and goes into
+  the summary, not an inline comment.
 
 ---
 
-## Passo 1 — Detectar o provider e conferir o ferramental
+## Step 1 — Detect the provider and check the tooling
 
 ```bash
 git remote get-url origin
 ```
 
-Pela URL, escolha o provider e confirme que a CLI dele está instalada **e**
-autenticada. Se faltar qualquer uma das duas, **pare** e instrua o usuário a instalar ou
-autenticar — não tente contornar.
+From the URL, pick the provider and confirm its CLI is installed **and**
+authenticated. If either is missing, **stop** and instruct the user to install or
+authenticate — do not try to work around it.
 
-| Origin contém | Provider | CLI | Verificação |
+| Origin contains | Provider | CLI | Check |
 |---|---|---|---|
-| `dev.azure.com` / `.visualstudio.com` | Azure DevOps | `az` + extensão `azure-devops` | `az account show` e `az extension list --query "[?name=='azure-devops']" -o tsv` |
+| `dev.azure.com` / `.visualstudio.com` | Azure DevOps | `az` + `azure-devops` extension | `az account show` and `az extension list --query "[?name=='azure-devops']" -o tsv` |
 | `github.com` | GitHub | `gh` | `gh auth status` |
 | `gitlab` | GitLab | `glab` | `glab auth status` |
 
-No Azure DevOps, derive a organização do origin
-(`.../v3/<ORG>/<PROJECT>/<REPO>` → `https://dev.azure.com/<ORG>`) e passe
-`--organization <ORG_URL>` em **todos** os comandos `az`. Guarde esse valor como `$ORG`.
+On Azure DevOps, derive the organization from the origin
+(`.../v3/<ORG>/<PROJECT>/<REPO>` → `https://dev.azure.com/<ORG>`) and pass
+`--organization <ORG_URL>` on **every** `az` command. Store this value as `$ORG`.
 
-## Passo 2 — Buscar os dados do PR
+## Step 2 — Fetch the PR data
 
-Pegue: `title`, branch de origem, branch de destino, autor e a **lista de arquivos
-alterados**.
+Get: `title`, source branch, target branch, author, and the **list of changed
+files**.
 
 **Azure DevOps**
 
@@ -77,9 +77,9 @@ alterados**.
 az repos pr show --id $PR --organization $ORG -o json
 ```
 
-Do JSON, guarde `title`, `sourceRefName`, `targetRefName`, `createdBy.uniqueName`,
-`repository.id` e `repository.project.id` (os dois últimos são necessários no Passo 8).
-Para o diff, use os commits do merge:
+From the JSON, keep `title`, `sourceRefName`, `targetRefName`, `createdBy.uniqueName`,
+`repository.id`, and `repository.project.id` (the last two are needed in Step 8).
+For the diff, use the merge commits:
 
 ```bash
 SRC=$(az repos pr show --id $PR --organization $ORG --query lastMergeSourceCommit.commitId -o tsv)
@@ -103,105 +103,106 @@ glab mr view $PR --output json
 glab mr diff $PR
 ```
 
-## Passo 3 — Ler os arquivos alterados
+## Step 3 — Read the changed files
 
-Leia o conteúdo **atual e completo** de cada arquivo alterado com a tool `Read`. O diff
-sozinho não dá contexto para avaliar decisão de arquitetura, nomeação ou lógica.
+Read the **current, full** content of every changed file with the `Read` tool. The diff
+alone doesn't give enough context to judge architecture decisions, naming, or logic.
 
-## Passo 4 — Reunir spec e documento de arquitetura
+## Step 4 — Gather the spec and architecture document
 
-1. **Spec relacionada** — procure com `Glob`: `specs/**/*.md`, `.specs/**/*.md`,
-   `**/*.spec.md`. Case contra a mudança pelo nome dos arquivos alterados e pelo
-   `title`/branch do PR; confirme com `Grep`/`Read` quando o casamento for fraco. Leia a
-   spec que casar por inteiro. Se nenhuma casar, registre "sem spec relacionada".
-2. **Documento de arquitetura** — procure na pasta `docs/` do repo: `docs/*.md` com nome
-   de arquitetura (`arquitetura`, `architecture`, `design`) e `docs/adr/*.md`. Leia por
-   inteiro o que existir. Se não houver, registre "sem doc de arquitetura".
+1. **Related spec** — search with `Glob`: `specs/**/*.md`, `.specs/**/*.md`,
+   `**/*.spec.md`. Match it against the change by changed-file names and by the PR's
+   `title`/branch; confirm with `Grep`/`Read` when the match is weak. Read the matching
+   spec in full. If none matches, record "no related spec".
+2. **Architecture document** — search the repo's `docs/` folder: `docs/*.md` with an
+   architecture-like name (`arquitetura`, `architecture`, `design`) and `docs/adr/*.md`.
+   Read whatever exists in full. If none exists, record "no architecture doc".
 
-## Passo 5 — Rodar os gates do projeto
+## Step 5 — Run the project's gates
 
-Leia o `package.json` e descubra os scripts de **lint**, **build** e **test** que o
-projeto realmente define (nomes variam: `lint`, `build`, `test`, `test:coverage`,
-`typecheck`, ou um agregado como `ci`). Use o gerenciador declarado em
-`packageManager`/lockfile. Rode cada um que existir; pule com `SKIP` o que não existir.
+Read `package.json` and find the **lint**, **build**, and **test** scripts the
+project actually defines (names vary: `lint`, `build`, `test`, `test:coverage`,
+`typecheck`, or an aggregate like `ci`). Use the package manager declared in
+`packageManager`/lockfile. Run each one that exists; skip with `SKIP` whatever doesn't
+exist.
 
-Registre uma linha `## Status:` com o resultado de cada gate e um `## Finding:` por
-falha, classificando pela referência `.claude/docs/pr-review/comment-types.md`:
+Record a `## Status:` line with the result of each gate and a `## Finding:` per
+failure, classifying by the `.claude/docs/pr-review/comment-types.md` reference:
 
-- **Lint FAIL** → ⚠️ **Alerta** no primeiro arquivo/linha reportado.
-- **Build FAIL** → 🚨 **Crítico** com `line: —`. Antes de registrar, confirme que a falha
-  vem do código do PR e não de config local ausente (`.env`, `*.local`, `.npmrc`).
-- **Test FAIL** → 🚨 **Crítico** com `line: —`.
+- **Lint FAIL** → ⚠️ **Warning** on the first reported file/line.
+- **Build FAIL** → 🚨 **Critical** with `line: —`. Before recording, confirm the failure
+  comes from the PR's code and not from missing local config (`.env`, `*.local`, `.npmrc`).
+- **Test FAIL** → 🚨 **Critical** with `line: —`.
 
-Cole a saída de erro direto no corpo do finding.
+Paste the error output directly into the finding's body.
 
-## Passo 6 — Rodar a análise estática
+## Step 6 — Run the static analysis
 
-O binário faz três checagens em `.ts`/`.tsx`/`.js`/`.jsx`: `file-size`, `duplication` e
-`effects`. Ele **sai com código 1 quando encontra violações** — encadeie `|| true` para
-não abortar o passo.
+The binary runs three checks on `.ts`/`.tsx`/`.js`/`.jsx`: `file-size`, `duplication`, and
+`effects`. It **exits with code 1 when it finds violations** — chain `|| true` so the
+step doesn't abort.
 
-Rode sobre a **raiz do código-fonte** (ex.: `src`), não só sobre os arquivos alterados: a
-checagem de duplicação precisa do corpus inteiro para achar o gêmeo em código existente.
-Depois **filtre** a saída, mantendo só violações que tocam um arquivo alterado no PR.
+Run it over the **source root** (e.g. `src`), not just the changed files: the
+duplication check needs the whole corpus to find the twin in existing code.
+Then **filter** the output, keeping only violations that touch a file changed in the PR.
 
 ```bash
 $GATE --ignore '**/*.test.*,**/*.d.ts' src 2>&1 | tee "$WORK/gate.txt" || true
 ```
 
-Ajuste os limiares ao projeto quando fizer sentido: `--file-size N` (padrão 500),
-`--dup-tokens N` (padrão 50), `--dup-lines N` (padrão 5), `--ignore GLOB`,
-`--check NOME` / `--skip NOME` (`file-size`, `duplication`, `effects`). `$GATE --help`
-lista tudo.
+Adjust the thresholds to the project when it makes sense: `--file-size N` (default 500),
+`--dup-tokens N` (default 50), `--dup-lines N` (default 5), `--ignore GLOB`,
+`--check NAME` / `--skip NAME` (`file-size`, `duplication`, `effects`). `$GATE --help`
+lists everything.
 
-**Se o projeto não tem React** (sem `react` nas dependências do `package.json`), adicione
-`--skip effects` — a checagem é de anti-padrão de `useEffect` e não se aplica.
+**If the project has no React** (no `react` in `package.json` dependencies), add
+`--skip effects` — the check targets `useEffect` anti-patterns and doesn't apply.
 
-Interprete cada bloco e registre os findings:
+Interpret each block and record the findings:
 
-- **`file-size`** — arquivo alterado acima do limite de linhas. Tamanho por si só não é
-  defeito: um arquivo longo e genuinamente coeso (um mapa exaustivo de tipos, código
-  gerado) está ok — **descarte**. Quando o arquivo mistura responsabilidades que leriam
-  melhor separadas, registre 💡 **Oportunidade** apontando um corte concreto.
-- **`duplication`** — bloco copiado que toca um arquivo alterado. Duplicação depende de
-  intenção: leia os dois fragmentos e descarte quando a repetição for incidental
-  (declarações de tipo parecidas, shapes gerados, código não relacionado que só
-  tokeniza igual). Quando mantiver, é 💡 **Oportunidade** — escalando para ⚠️ **Alerta**
-  em bloco grande ou lógica duplicada entre camadas. Aponte a extração de uma
-  função/módulo comum ou, quando o gêmeo for código existente, o reuso dele.
-- **`effects`** — anti-padrão de `useEffect`
+- **`file-size`** — changed file above the line limit. Size alone isn't a defect: a
+  long file that's genuinely cohesive (an exhaustive type map, generated code) is fine —
+  **discard**. When the file mixes responsibilities that would read better separated,
+  record 💡 **Opportunity** pointing at a concrete split.
+- **`duplication`** — copied block that touches a changed file. Duplication depends on
+  intent: read both fragments and discard when the repetition is incidental
+  (similar type declarations, generated shapes, unrelated code that just
+  tokenizes the same). When you keep it, it's 💡 **Opportunity** — escalating to ⚠️
+  **Warning** for a large block or logic duplicated across layers. Point at extracting a
+  shared function/module or, when the twin is existing code, reusing it.
+- **`effects`** — `useEffect` anti-pattern
   ([you-might-not-need-an-effect](https://react.dev/learn/you-might-not-need-an-effect)).
-  Confirme lendo o código ao redor; quando o efeito for legítimo, descarte. Quando
-  mantiver, é ⚠️ **Alerta** para `effect-fetch-no-cleanup` e `effect-chain`, 💡
-  **Oportunidade** para os demais.
+  Confirm by reading the surrounding code; when the effect is legitimate, discard. When
+  you keep it, it's ⚠️ **Warning** for `effect-fetch-no-cleanup` and `effect-chain`, 💡
+  **Opportunity** for the rest.
 
-## Passo 7 — Analisar com as lentes
+## Step 7 — Analyze with the lenses
 
-Percorra os arquivos alterados um a um e aplique **todas** as lentes de
-`.claude/docs/pr-review/analysis-lenses.md` em cada um antes de passar para o próximo.
-Cada lente é verificada contra o conteúdo atual do arquivo, não só contra o diff.
+Go through the changed files one by one and apply **all** lenses from
+`.claude/docs/pr-review/analysis-lenses.md` to each before moving to the next.
+Each lens is checked against the file's current content, not just the diff.
 
-Anexe um `## Finding:` com `source: lens:<a|b|c>` para cada violação no momento em que
-confirmá-la.
+Append a `## Finding:` with `source: lens:<a|b|c>` for each violation the moment you
+confirm it.
 
-## Passo 8 — Montar e postar o review
+## Step 8 — Assemble and post the review
 
-Monte `$WORK/review.json` a partir do ledger, seguindo
-`.claude/docs/pr-review/output-format.md`. Sem reanálise: o corpo de cada finding já
-está final.
+Assemble `$WORK/review.json` from the ledger, following
+`.claude/docs/pr-review/output-format.md`. No re-analysis: each finding's body is
+already final.
 
-- Cada `## Finding:` com linha concreta → um item de `inline_comments[]`.
-- Findings com `line: —` e a linha `## Status:` → tecidos no `summary`.
-- `event` → `REQUEST_CHANGES` se houver qualquer finding `critico`; senão `COMMENT`.
+- Each `## Finding:` with a concrete line → an item in `inline_comments[]`.
+- Findings with `line: —` and the `## Status:` line → woven into the `summary`.
+- `event` → `REQUEST_CHANGES` if there's any `critical` finding; otherwise `COMMENT`.
 
-Antes de postar, **mostre o resumo e a contagem de comentários ao usuário e peça
-confirmação** — postar é uma ação visível para o time e não se desfaz sozinha.
+Before posting, **show the summary and comment count to the user and ask for
+confirmation** — posting is an action visible to the team and can't be undone by itself.
 
-**Azure DevOps** — cada comentário é uma *thread*. Para cada item, escreva um JSON em
-`$WORK/thread-<n>.json` e invoque a API:
+**Azure DevOps** — each comment is a *thread*. For each item, write a JSON to
+`$WORK/thread-<n>.json` and call the API:
 
 ```jsonc
-// inline: com threadContext
+// inline: with threadContext
 {
   "comments": [{ "parentCommentId": 0, "commentType": 1, "content": "<body>" }],
   "status": 1,
@@ -211,7 +212,7 @@ confirmação** — postar é uma ação visível para o time e não se desfaz s
     "rightFileEnd": { "line": 42, "offset": 1 }
   }
 }
-// resumo: o mesmo objeto sem threadContext
+// summary: the same object without threadContext
 ```
 
 ```bash
@@ -221,27 +222,27 @@ az devops invoke --area git --resource pullRequestThreads \
   --organization $ORG
 ```
 
-Note o `/` inicial obrigatório no `filePath`. Quando o `event` for `REQUEST_CHANGES`,
-registre o voto depois das threads:
+Note the mandatory leading `/` in `filePath`. When `event` is `REQUEST_CHANGES`,
+record the vote after the threads:
 
 ```bash
 az repos pr set-vote --id $PR --vote reject --organization $ORG
 ```
 
-**GitHub** — um único review carrega resumo e comentários inline. Converta
-`review.json` para o payload da API (`body`, `event`, `comments[]` com
-`path`/`line`/`body`) em `$WORK/gh-review.json`:
+**GitHub** — a single review carries the summary and inline comments. Convert
+`review.json` into the API payload (`body`, `event`, `comments[]` with
+`path`/`line`/`body`) at `$WORK/gh-review.json`:
 
 ```bash
 gh api repos/{owner}/{repo}/pulls/$PR/reviews --method POST --input "$WORK/gh-review.json"
 ```
 
-**GitLab** — poste o resumo como nota e cada finding como discussão posicionada:
+**GitLab** — post the summary as a note and each finding as a positioned discussion:
 
 ```bash
 glab mr note $PR --message "<summary>"
 glab api projects/:id/merge_requests/$PR/discussions --method POST --input "$WORK/discussion-<n>.json"
 ```
 
-Ao final, informe ao usuário quantos comentários foram postados, o `event` aplicado e o
-link do PR.
+At the end, tell the user how many comments were posted, the `event` applied, and the
+PR link.

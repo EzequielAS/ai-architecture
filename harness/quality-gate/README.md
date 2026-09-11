@@ -1,78 +1,79 @@
 # Quality Gate
 
-Binário único que roda três checagens em código TS/JS e **sai com código 1** se
-encontrar violações — feito para usar em CI ou local.
+Single binary that runs three checks on TS/JS code and **exits with code 1** if
+it finds violations — built for use in CI or locally.
 
-| Checagem | O que verifica |
+| Check | What it verifies |
 | --- | --- |
-| `file-size` | arquivos acima do limite de linhas |
-| `duplication` | blocos de código copiados entre (ou dentro de) arquivos |
-| `effects` | anti-padrões de `useEffect` ([you-might-not-need-an-effect](https://react.dev/learn/you-might-not-need-an-effect)) |
+| `file-size` | files above the line limit |
+| `duplication` | code blocks copied between (or within) files |
+| `effects` | `useEffect` anti-patterns ([you-might-not-need-an-effect](https://react.dev/learn/you-might-not-need-an-effect)) |
 
 ## Build
 
 ```bash
-./build.sh          # bin/quality-gate para a máquina atual
-./build.sh all      # binários para Linux, macOS e Windows (amd64 e arm64)
+./build.sh          # bin/quality-gate for the current machine
+./build.sh all      # binaries for Linux, macOS and Windows (amd64 and arm64)
 ```
 
-## Uso
+## Usage
 
 ```bash
-quality-gate [flags] [caminho ...]
+quality-gate [flags] [path ...]
 ```
 
-Os caminhos podem ser arquivos ou diretórios (padrão: `.`). Só `.ts`, `.tsx`,
-`.js` e `.jsx` são analisados; `node_modules` e diretórios ocultos são sempre
-ignorados.
+Paths can be files or directories (default: `.`). Only `.ts`, `.tsx`,
+`.js` and `.jsx` are analyzed; `node_modules` and hidden directories are always
+ignored.
 
 ## Flags
 
-| Flag | Padrão | Descrição |
+| Flag | Default | Description |
 | --- | --- | --- |
-| `--file-size N` | `500` | limite de linhas por arquivo |
-| `--dup-tokens N` | `50` | mínimo de tokens iguais para acusar duplicação |
-| `--dup-lines N` | `5` | mínimo de linhas para acusar duplicação |
-| `--ignore GLOB` | — | glob a ignorar; repetível ou separado por vírgula |
-| `--check NOME` | todas | roda só `file-size`, `duplication` ou `effects`; repetível |
-| `--skip NOME` | — | pula `file-size`, `duplication` ou `effects`; repetível ou separado por vírgula |
+| `--file-size N` | `500` | line limit per file |
+| `--dup-tokens N` | `50` | minimum matching tokens to flag duplication |
+| `--dup-lines N` | `5` | minimum lines to flag duplication |
+| `--ignore GLOB` | — | glob to ignore; repeatable or comma-separated |
+| `--check NAME` | all | run only `file-size`, `duplication` or `effects`; repeatable |
+| `--skip NAME` | — | skip `file-size`, `duplication` or `effects`; repeatable or comma-separated |
 
-Nos globs, `**` atravessa diretórios, `*` fica dentro de um segmento e `?` é um
-caractere. Um glob sem `/` também casa com o nome do arquivo em qualquer nível.
+In globs, `**` crosses directories, `*` stays within a single segment, and `?`
+matches one character. A glob without `/` also matches the file name at any
+level.
 
 ```bash
-# gate completo
+# full gate
 quality-gate --file-size 300 --dup-tokens 60 --ignore '**/*.test.*,**/*.d.ts' src
 
-# só duplicação, ignorando código gerado
+# duplication only, ignoring generated code
 quality-gate --check duplication --dup-tokens 80 --ignore '**/generated/**' src
 
-# tudo menos os efeitos
+# everything except effects
 quality-gate --skip effects src
 
-# pulando mais de uma checagem
+# skipping more than one check
 quality-gate --skip effects,duplication src
 ```
 
-`--skip` parte de todas as checagens e remove as indicadas. Combinado com
-`--check`, é aplicado depois: `--check file-size,effects --skip effects` roda só
-`file-size`. Pular todas as checagens é erro de uso.
+`--skip` starts from all checks and removes the ones listed. Combined with
+`--check`, it is applied afterward: `--check file-size,effects --skip effects`
+runs only `file-size`. Skipping every check is a usage error.
 
-## Códigos de saída
+## Exit codes
 
-| Código | Significado |
+| Code | Meaning |
 | --- | --- |
-| `0` | nenhuma violação |
-| `1` | violações encontradas |
-| `2` | erro de uso (ex.: `--check`/`--skip` inválido, ou `--skip` removendo todas) |
+| `0` | no violations |
+| `1` | violations found |
+| `2` | usage error (e.g. invalid `--check`/`--skip`, or `--skip` removing every check) |
 
-## Regras de useEffect
+## useEffect rules
 
-| Regra | Quando dispara |
+| Rule | When it fires |
 | --- | --- |
-| `effect-derives-state` | o Effect só faz `setState` com valor calculado das dependências |
-| `effect-resets-state` | o Effect só reseta estado para um valor constante |
-| `effect-notifies-parent` | o Effect chama um callback `onX` do pai |
-| `effect-external-store` | o Effect assina estado ambiente do browser (`online`, `storage`, …) |
-| `effect-fetch-no-cleanup` | o Effect busca dados e faz `setState` sem cleanup |
-| `effect-chain` | o Effect depende de um estado que outro Effect atualiza |
+| `effect-derives-state` | the Effect only does `setState` with a value computed from its dependencies |
+| `effect-resets-state` | the Effect only resets state to a constant value |
+| `effect-notifies-parent` | the Effect calls a parent `onX` callback |
+| `effect-external-store` | the Effect subscribes to ambient browser state (`online`, `storage`, …) |
+| `effect-fetch-no-cleanup` | the Effect fetches data and does `setState` without cleanup |
+| `effect-chain` | the Effect depends on state that another Effect updates |
