@@ -36,12 +36,3 @@
 
 - Structured JSON when logging for debugging / observability.
 - Plain text only for user-facing CLI output.
-
-## Required check before finishing a task
-
-Before considering a task done (and before any commit), run this:
-
-```bash
-# Sensors (code scanners, lint, typecheck, tests, build)
-npm run quality
-```

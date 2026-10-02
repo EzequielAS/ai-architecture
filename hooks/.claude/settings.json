@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR/.claude/scripts/run-quality-check.sh\"",
+            "timeout": 300,
+            "statusMessage": "Rodando npm run quality..."
+          }
+        ]
+      }
+    ]
+  }
+}
